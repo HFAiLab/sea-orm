@@ -280,6 +280,7 @@ impl EntityWriter {
     pub fn write_prelude(&self) -> OutputFile {
         let mut lines = Vec::new();
         Self::write_doc_comment(&mut lines);
+        lines.push("#![allow(unused_imports)]".to_owned());
         let code_blocks = self.entities.iter().map(Self::gen_prelude_use).collect();
         Self::write(&mut lines, code_blocks);
         OutputFile {
