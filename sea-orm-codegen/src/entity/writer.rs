@@ -707,8 +707,10 @@ impl EntityWriter {
     pub fn gen_prelude_use(entity: &Entity) -> TokenStream {
         let table_name_snake_case_ident = entity.get_table_name_snake_case_ident();
         let table_name_camel_case_ident = entity.get_table_name_camel_case_ident();
+        let model_use_name = format!("{}Model", table_name_camel_case_ident);
         quote! {
             pub use super::#table_name_snake_case_ident::Entity as #table_name_camel_case_ident;
+            pub use super::#table_name_snake_case_ident::Model as #model_use_name;
         }
     }
 
