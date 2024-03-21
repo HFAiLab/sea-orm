@@ -711,7 +711,7 @@ impl EntityWriter {
         let model_use_name = format_ident!("{}Model", table_name_camel_case_ident);
         quote! {
             pub use super::#table_name_snake_case_ident::Entity as #table_name_camel_case_ident;
-            pub use super::#table_name_snake_case_ident::Model as #model_use_name;
+            pub use super::#table_name_snake_case_ident::ActiveModel as #model_use_name;
         }
     }
 
