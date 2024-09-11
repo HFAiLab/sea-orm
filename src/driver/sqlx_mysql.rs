@@ -77,6 +77,39 @@ impl SqlxMySqlConnector {
             },
         ))
     }
+
+    /// Connect to the database synchronously.
+    #[instrument(level = "trace")]
+    pub fn connect_sync(options: ConnectOptions) -> Result<DatabaseConnection, DbErr> {
+        let mut opt = options
+            .url
+            .parse::<MySqlConnectOptions>()
+            .map_err(sqlx_error_to_conn_err)?;
+        use sqlx::ConnectOptions;
+        if !options.sqlx_logging {
+            opt = opt.disable_statement_logging();
+        } else {
+            opt = opt.log_statements(options.sqlx_logging_level);
+            if options.sqlx_slow_statements_logging_level != LevelFilter::Off {
+                opt = opt.log_slow_statements(
+                    options.sqlx_slow_statements_logging_level,
+                    options.sqlx_slow_statements_logging_threshold,
+                );
+            }
+        }
+        if !options.connect_lazy {
+            return Err(DbErr::Conn(RuntimeErr::Internal(
+                "Sync connection with `lazy` set to false is not supported".to_string(),
+            )));
+        }
+        let pool = options.sqlx_pool_options().connect_lazy_with(opt);
+        Ok(DatabaseConnection::SqlxMySqlPoolConnection(
+            SqlxMySqlPoolConnection {
+                pool,
+                metric_callback: None,
+            },
+        ))
+    }
 }
 
 impl SqlxMySqlConnector {
