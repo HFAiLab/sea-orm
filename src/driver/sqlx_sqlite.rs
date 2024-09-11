@@ -254,52 +254,6 @@ impl From<SqliteRow> for QueryResult {
             row: QueryResultRow::SqlxSqlite(row),
         }
     }
-
-    /// Connect to the database synchronously.
-    #[instrument(level = "trace")]
-    pub fn connect_sync(options: ConnectOptions) -> Result<DatabaseConnection, DbErr> {
-        let mut options = options;
-        let mut opt = options
-            .url
-            .parse::<SqliteConnectOptions>()
-            .map_err(sqlx_error_to_conn_err)?;
-        if let Some(sqlcipher_key) = &options.sqlcipher_key {
-            opt = opt.pragma("key", sqlcipher_key.clone());
-        }
-        use sqlx::ConnectOptions;
-        if !options.sqlx_logging {
-            opt = opt.disable_statement_logging();
-        } else {
-            opt = opt.log_statements(options.sqlx_logging_level);
-            if options.sqlx_slow_statements_logging_level != LevelFilter::Off {
-                opt = opt.log_slow_statements(
-                    options.sqlx_slow_statements_logging_level,
-                    options.sqlx_slow_statements_logging_threshold,
-                );
-            }
-        }
-        if options.get_max_connections().is_none() {
-            options.max_connections(1);
-        }
-        if options.get_min_connections().is_none() {
-            options.min_connections(1);
-        }
-
-        let pool = options.pool_options().connect_lazy_with(opt);
-
-        let pool = SqlxSqlitePoolConnection {
-            pool,
-            metric_callback: None,
-        };
-
-        #[cfg(feature = "sqlite-use-returning-for-3_35")]
-        {
-            let version = get_version(&pool).await?;
-            ensure_returning_version(&version)?;
-        }
-
-        Ok(DatabaseConnection::SqlxSqlitePoolConnection(pool))
-    }
 }
 
 impl From<SqliteQueryResult> for ExecResult {
