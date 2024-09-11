@@ -252,6 +252,50 @@ impl From<PgRow> for QueryResult {
             row: QueryResultRow::SqlxPostgres(row),
         }
     }
+
+    /// Connect to the database synchronously.
+    #[instrument(level = "trace")]
+    pub fn connect_sync(options: ConnectOptions) -> Result<DatabaseConnection, DbErr> {
+        let mut opt = options
+            .url
+            .parse::<PgConnectOptions>()
+            .map_err(sqlx_error_to_conn_err)?;
+        use sqlx::ConnectOptions;
+        if !options.sqlx_logging {
+            opt = opt.disable_statement_logging();
+        } else {
+            opt = opt.log_statements(options.sqlx_logging_level);
+            if options.sqlx_slow_statements_logging_level != LevelFilter::Off {
+                opt = opt.log_slow_statements(
+                    options.sqlx_slow_statements_logging_level,
+                    options.sqlx_slow_statements_logging_threshold,
+                );
+            }
+        }
+        let set_search_path_sql = options
+            .schema_search_path
+            .as_ref()
+            .map(|schema| format!("SET search_path = '{schema}'"));
+
+        let mut pool_options = options.pool_options();
+        if let Some(sql) = set_search_path_sql {
+            pool_options = pool_options.after_connect(move |conn, _| {
+                let sql = sql.clone();
+                Box::pin(async move {
+                    sqlx::Executor::execute(conn, sql.as_str())
+                        .await
+                        .map(|_| ())
+                })
+            });
+        }
+        let pool = pool_options.connect_lazy_with(opt);
+        Ok(DatabaseConnection::SqlxPostgresPoolConnection(
+            SqlxPostgresPoolConnection {
+                pool,
+                metric_callback: None,
+            },
+        ))
+    }
 }
 
 impl From<PgQueryResult> for ExecResult {

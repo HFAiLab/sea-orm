@@ -97,6 +97,33 @@ impl MockDatabaseConnector {
         }
         connect_mock_db!(DbBackend::Postgres)
     }
+
+    /// Connect to the [MockDatabase], synchronously
+    #[allow(unused_variables)]
+    #[instrument(level = "trace")]
+    pub fn connect_sync(string: &str) -> Result<DatabaseConnection, DbErr> {
+        macro_rules! connect_mock_db {
+            ( $syntax: expr ) => {
+                Ok(DatabaseConnection::MockDatabaseConnection(Arc::new(
+                    MockDatabaseConnection::new(MockDatabase::new($syntax)),
+                )))
+            };
+        }
+
+        #[cfg(feature = "sqlx-mysql")]
+        if crate::SqlxMySqlConnector::accepts(string) {
+            return connect_mock_db!(DbBackend::MySql);
+        }
+        #[cfg(feature = "sqlx-postgres")]
+        if crate::SqlxPostgresConnector::accepts(string) {
+            return connect_mock_db!(DbBackend::Postgres);
+        }
+        #[cfg(feature = "sqlx-sqlite")]
+        if crate::SqlxSqliteConnector::accepts(string) {
+            return connect_mock_db!(DbBackend::Sqlite);
+        }
+        connect_mock_db!(DbBackend::Postgres)
+    }
 }
 
 impl MockDatabaseConnection {
