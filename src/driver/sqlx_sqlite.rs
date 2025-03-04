@@ -113,6 +113,59 @@ impl SqlxSqliteConnector {
 
         Ok(DatabaseConnection::SqlxSqlitePoolConnection(pool))
     }
+
+    /// Connect to the database synchronously.
+    #[instrument(level = "trace")]
+    pub fn connect_sync(options: ConnectOptions) -> Result<DatabaseConnection, DbErr> {
+        if !options.connect_lazy {
+            return Err(DbErr::Conn(RuntimeErr::Internal(
+                "Sync connection with `lazy` set to false is not supported".to_string(),
+            )));
+        }
+        let mut options = options;
+        let mut sqlx_opts = options
+            .url
+            .parse::<SqliteConnectOptions>()
+            .map_err(sqlx_error_to_conn_err)?;
+        if let Some(sqlcipher_key) = &options.sqlcipher_key {
+            sqlx_opts = sqlx_opts.pragma("key", sqlcipher_key.clone());
+        }
+        use sqlx::ConnectOptions;
+        if !options.sqlx_logging {
+            sqlx_opts = sqlx_opts.disable_statement_logging();
+        } else {
+            sqlx_opts = sqlx_opts.log_statements(options.sqlx_logging_level);
+            if options.sqlx_slow_statements_logging_level != LevelFilter::Off {
+                sqlx_opts = sqlx_opts.log_slow_statements(
+                    options.sqlx_slow_statements_logging_level,
+                    options.sqlx_slow_statements_logging_threshold,
+                );
+            }
+        }
+
+        if options.get_max_connections().is_none() {
+            options.max_connections(1);
+        }
+
+        if let Some(f) = &options.sqlite_opts_fn {
+            sqlx_opts = f(sqlx_opts);
+        }
+
+        let pool = options.sqlx_pool_options().connect_lazy_with(sqlx_opts);
+
+        let pool = SqlxSqlitePoolConnection {
+            pool,
+            metric_callback: None,
+        };
+
+        #[cfg(feature = "sqlite-use-returning-for-3_35")]
+        {
+            let version = get_version(&pool).await?;
+            ensure_returning_version(&version)?;
+        }
+
+        Ok(DatabaseConnection::SqlxSqlitePoolConnection(pool))
+    }
 }
 
 impl SqlxSqliteConnector {

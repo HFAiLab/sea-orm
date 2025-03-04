@@ -341,7 +341,7 @@ impl EntityWriter {
     pub fn write_prelude(&self, with_prelude: WithPrelude, frontend_format: bool) -> OutputFile {
         let mut lines = Vec::new();
         Self::write_doc_comment(&mut lines);
-        if with_prelude == WithPrelude::AllAllowUnusedImports {
+        if with_prelude == WithPrelude::AllAllowUnusedImports || true {
             Self::write_allow_unused_imports(&mut lines)
         }
         let code_blocks = self
@@ -872,8 +872,12 @@ impl EntityWriter {
     pub fn gen_prelude_use(entity: &Entity) -> TokenStream {
         let table_name_snake_case_ident = entity.get_table_name_snake_case_ident();
         let table_name_camel_case_ident = entity.get_table_name_camel_case_ident();
+        let model_use_name = format_ident!("{}Model", table_name_camel_case_ident);
+        let active_model_use_name = format_ident!("{}ActiveModel", table_name_camel_case_ident);
         quote! {
             pub use super::#table_name_snake_case_ident::Entity as #table_name_camel_case_ident;
+            pub use super::#table_name_snake_case_ident::Model as #model_use_name;
+            pub use super::#table_name_snake_case_ident::ActiveModel as #active_model_use_name;
         }
     }
 
