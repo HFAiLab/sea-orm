@@ -324,7 +324,7 @@ impl EntityWriter {
     pub fn write_prelude(&self, with_prelude: WithPrelude) -> OutputFile {
         let mut lines = Vec::new();
         Self::write_doc_comment(&mut lines);
-        if with_prelude == WithPrelude::AllAllowUnusedImports {
+        if with_prelude == WithPrelude::AllAllowUnusedImports || true {
             Self::write_allow_unused_imports(&mut lines)
         }
         let code_blocks = self.entities.iter().map(Self::gen_prelude_use).collect();
