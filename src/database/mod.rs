@@ -133,6 +133,44 @@ impl Database {
         )))
     }
 
+    /// Method to create a [DatabaseConnection] on a database, synchronously
+    #[instrument(level = "trace", skip(opt))]
+    pub fn connect_sync<C>(opt: C) -> Result<DatabaseConnection, DbErr>
+    where
+        C: Into<ConnectOptions>,
+    {
+        let opt: ConnectOptions = opt.into();
+
+        if url::Url::parse(&opt.url).is_err() {
+            return Err(conn_err(format!(
+                "The connection string '{}' cannot be parsed.",
+                opt.url
+            )));
+        }
+
+        #[cfg(feature = "sqlx-mysql")]
+        if DbBackend::MySql.is_prefix_of(&opt.url) {
+            return crate::SqlxMySqlConnector::connect_sync(opt);
+        }
+        #[cfg(feature = "sqlx-postgres")]
+        if DbBackend::Postgres.is_prefix_of(&opt.url) {
+            return crate::SqlxPostgresConnector::connect_sync(opt);
+        }
+        #[cfg(feature = "sqlx-sqlite")]
+        if DbBackend::Sqlite.is_prefix_of(&opt.url) {
+            return crate::SqlxSqliteConnector::connect_sync(opt);
+        }
+        #[cfg(feature = "mock")]
+        if crate::MockDatabaseConnector::accepts(&opt.url) {
+            return crate::MockDatabaseConnector::connect_sync(&opt.url);
+        }
+
+        Err(conn_err(format!(
+            "The connection string '{}' has no supporting driver.",
+            opt.url
+        )))
+    }
+
     /// Method to create a [DatabaseConnection] on a proxy database
     #[cfg(feature = "proxy")]
     #[instrument(level = "trace", skip(proxy_func_arc))]

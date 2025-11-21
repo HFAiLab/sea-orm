@@ -126,6 +126,73 @@ impl SqlxPostgresConnector {
             },
         ))
     }
+
+    /// Connect to the database synchronously.
+    #[instrument(level = "trace")]
+    pub fn connect_sync(options: ConnectOptions) -> Result<DatabaseConnection, DbErr> {
+        if !options.connect_lazy {
+            return Err(DbErr::Conn(RuntimeErr::Internal(
+                "Sync connection with `lazy` set to false is not supported".to_string(),
+            )));
+        }
+        let mut sqlx_opts = options
+            .url
+            .parse::<PgConnectOptions>()
+            .map_err(sqlx_error_to_conn_err)?;
+        use sqlx::ConnectOptions;
+        if !options.sqlx_logging {
+            sqlx_opts = sqlx_opts.disable_statement_logging();
+        } else {
+            sqlx_opts = sqlx_opts.log_statements(options.sqlx_logging_level);
+            if options.sqlx_slow_statements_logging_level != LevelFilter::Off {
+                sqlx_opts = sqlx_opts.log_slow_statements(
+                    options.sqlx_slow_statements_logging_level,
+                    options.sqlx_slow_statements_logging_threshold,
+                );
+            }
+        }
+
+        if let Some(f) = &options.pg_opts_fn {
+            sqlx_opts = f(sqlx_opts);
+        }
+
+        let set_search_path_sql = options.schema_search_path.as_ref().map(|schema| {
+            let mut string = "SET search_path = ".to_owned();
+            if schema.starts_with('"') {
+                write!(&mut string, "{schema}").unwrap();
+            } else {
+                for (i, schema) in schema.split(',').enumerate() {
+                    if i > 0 {
+                        write!(&mut string, ",").unwrap();
+                    }
+                    if schema.starts_with('"') {
+                        write!(&mut string, "{schema}").unwrap();
+                    } else {
+                        write!(&mut string, "\"{schema}\"").unwrap();
+                    }
+                }
+            }
+            string
+        });
+        let mut pool_options = options.sqlx_pool_options();
+        if let Some(sql) = set_search_path_sql {
+            pool_options = pool_options.after_connect(move |conn, _| {
+                let sql = sql.clone();
+                Box::pin(async move {
+                    sqlx::Executor::execute(conn, sql.as_str())
+                        .await
+                        .map(|_| ())
+                })
+            });
+        }
+        let pool = pool_options.connect_lazy_with(sqlx_opts);
+        Ok(DatabaseConnection::SqlxPostgresPoolConnection(
+            SqlxPostgresPoolConnection {
+                pool,
+                metric_callback: None,
+            },
+        ))
+    }
 }
 
 impl SqlxPostgresConnector {
